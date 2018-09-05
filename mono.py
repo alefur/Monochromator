@@ -15,39 +15,40 @@ wdll.odev_open()
 
 #Information
 def status():
-    a_test = create_string_buffer(256)
-    if len(a_test.value) == 0:
+    buffer = create_string_buffer(256)
+    wdll.odev_ask(b"INFO?",buffer)
+
+    if len(buffer.value) == 0:
         raise UserWarning('Monochromator is offline')
-    wdll.odev_ask(b"INFO?",a_test)
-    print(a_test.value)
-    return a_test.value
+    
+    return buffer.value
 
 
 #Open the shutter
 def shutteropen():
-    b_test = create_string_buffer(256)
-    if len(b_test.value)== 0 :
-        raise TypeError('Monochromator is offline')
-    wdll.odev_ask(b"SHUTTER O",b_test)
+    status()
+    buffer = create_string_buffer(256)
+    wdll.odev_ask(b"SHUTTER O",buffer)
     wdll.odev_write(b'SHUTTER?\n')
-    wdll.odev_read(b_test)
-    print(b_test.value)
-    if not b_test.value ==a:
+    wdll.odev_read(buffer)
+
+    if not buffer.value ==a:
         raise UserWarning('shutter is not in required position')
-    return b_test.value
+        
+    return buffer.value
 
 #Close the shutter
 def shutterclose():
-    j_test = create_string_buffer(256)
-    if len(j_test.value)==0 :
-        raise TypeError('Monochromator is offline')
-    wdll.odev_ask(b"SHUTTER C",j_test)
+    status()
+    buffer = create_string_buffer(256)
+    
+    wdll.odev_ask(b"SHUTTER C",buffer)
     wdll.odev_write(b'SHUTTER?\n')
-    wdll.odev_read(j_test)
-    print(j_test.value)
-    if not j_test.value ==a:
+    wdll.odev_read(buffer)
+
+    if not buffer.value ==a:
         raise UserWarning('shutter is not in required position')
-    return j_test.value
+    return buffer.value
 
 #Ask for the shutter (Open or Close)
 def getshutter():
