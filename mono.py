@@ -1,136 +1,117 @@
-# coding: utf-8
-
-# In[2]:
-
-
 import time
 # Appel de la dll, importation, et ouverture de la communication
 from ctypes import cdll, c_char_p, c_wchar_p, create_string_buffer, addressof, c_byte
 
-wdll = cdll.LoadLibrary('ODevice.dll')
 
-# Ouverture de la communication
-wdll.odev_open()
+class Monochromator:
+    wdll = cdll.LoadLibrary('ODevice.dll')
+    wdll.odev_open()
 
+    errorCodes = {0: 'Command not understood',
+                  1: 'System error (miscellaneous)',
+                  2: 'Bad parameter used in Command',
+                  3: 'Destination position for wavelength motion not allowed',
+                  6: 'Accessory not present (usually filter wheel)',
+                  7: 'Accessory already in specified position',
+                  8: 'Could not home wavelength drive',
+                  9: 'Label too long',
+                  }
 
-def status():
-    """Information"""
-    buffer = create_string_buffer(256)
-    wdll.odev_ask(b'INFO?', buffer)
+    def __init__(self, remote=False):
+        if not remote:
+            self.status()
+            self.init()
 
-    if len(buffer.value) == 0:
-        raise UserWarning('Monochromator is offline')
+    def init(self):
+        self.wdll.odev_write(b'HANDSHAKE 1\n')
 
-    return buffer.value
+    def sendCommand(self, cmdStr, error='20\r\n'):
+        """send command to monochromator"""
+        buffer = create_string_buffer(256)
+        self.wdll.odev_ask(b'%s\n' % cmdStr, buffer)
 
+        if len(buffer.value) == 0:
+            raise UserWarning('Monochromator is offline')
 
-def getshutter(getStatus=True):
-    """Ask for the shutter position(Open or Close)"""
-    if getStatus:
-        status()
+        ret = buffer.value.decode('utf8')
+        if error in ret:
+            raise UserWarning(self.getError())
 
-    buffer = create_string_buffer(256)
-    wdll.odev_ask(b'SHUTTER?\n', buffer)
+        return ret.split('\r\n', 1)
 
-    return buffer.value
+    def getError(self):
+        buffer = create_string_buffer(256)
+        self.wdll.odev_ask(b'ERROR?\n' % cmdStr, buffer)
+        errorCode = buffer.value.decode('utf8').split('\r\n')[0]
 
+        return self.errorCodes[int(errorCode)]
 
-def shutteropen():
-    """Open the shutter"""
-    status()
+    def status(self):
+        """Information"""
+        return self.sendCommand('INFO?')
 
-    wdll.odev_write(b'SHUTTER O')
-    shutter = getshutter(getStatus=False)
+    def getshutter(self):
+        """Ask for the shutter position(Open or Close)"""
+        return self.sendCommand('SHUTTER?')
 
-    if shutter != b'SHUTTER O':
-        raise UserWarning('shutter is not in required position')
+    def getgrating(self):
+        """To know which grating is currently used"""
+        return self.sendCommand('GRAT?')
 
-    return shutter
+    def getoutport(self):
+        """To know which grating is currently used """
+        return self.sendCommand('OUTPORT?')
 
+    def getwave(self):
+        """To know which wavelength is being sent"""
+        return self.sendCommand('WAVE?')
 
-def shutterclose():
-    """Close the shutter"""
-    status()
+    def __setshutter(self, state):
+        """Open the shutter"""
+        self.sendCommand('SHUTTER %s' % state)
 
-    wdll.odev_write(b'SHUTTER C')
-    shutter = getshutter(getStatus=False)
+        return self.getshutter()
 
-    if shutter != b'SHUTTER C':
-        raise UserWarning('shutter is not in required position')
+    def shutteropen(self):
+        """Close the shutter"""
+        return self.__setshutter(state='O')
 
-    return shutter
+    def shutterclose(self):
+        """Close the shutter"""
+        return self.__setshutter(state='C')
 
+    def setgrating(self, gratingId):
+        """Choose the grating (1,2,3)"""
 
-def getgrating(getStatus=True):
-    """To know which grating is currently used"""
-    if getStatus:
-        status()
+        gratingId = int(gratingId)
 
-    buffer = create_string_buffer(256)
-    wdll.odev_ask(b'GRAT?\n', buffer)
+        if not 1 <= gratingId <= 3:
+            raise ValueError('try 1 for the grating 1,2 for grating 2 or 3 for grating 3')
 
-    return buffer.value
+        self.sendCommand('GRAT %d' % gratingId)
 
+        return self.getgrating()
 
-def setgrating(gratingId):
-    """Choose the grating (1,2,3)"""
-    status()
+    def setoutport(self, outportId):
+        """Choose the outport : For Axial OUTPORT = 1 , For Lateral OUTPORT = 2"""
 
-    gratingId = int(gratingId)
+        outportId = int(outportId)
 
-    if not 1 <= gratingId <= 3:
-        raise ValueError('try 1 for the grating 1,2 for grating 2 or 3 for grating 3')
+        if not 1 <= outportId <= 2:
+            raise ValueError('try 1 for the axial outport or 2 for the lateral outport')
 
-    wdll.odev_write(b'GRAT %d\n' % gratingId)
+        self.sendCommand('OUTPORT %d' % outportId)
 
-    return getgrating(getStatus=False)
+        return self.getoutport()
 
+    def setwave(self, wave):
+        """Send a wavelength"""
 
-def getoutport(getStatus=True):
-    """To know which grating is currently used """
-    if getStatus:
-        status()
+        wave = float(wave)
 
-    buffer = create_string_buffer(256)
-    wdll.odev_ask(b'OUTPORT?\n', buffer)
+        if not 300 <= wave <= 1200:
+            raise ValueError('a must be within 300 - 1200')
 
-    return buffer.value
+        self.sendCommand('GOWAVE %.3f' % wave)
 
-
-def setoutport(outportId):
-    """Choose the outport : For Axial OUTPORT = 1 , For Lateral OUTPORT = 2"""
-    status()
-
-    outportId = int(outportId)
-
-    if not 1 <= outportId <= 2:
-        raise ValueError('try 1 for the axial outport or 2 for the lateral outport')
-
-    wdll.odev_write(b'OUTPORT %d\n' % outportId)
-
-    return getoutport(getStatus=False)
-
-
-def getwave(getStatus=True):
-    """To know which wavelength is being sent"""
-
-    if getStatus:
-        status()
-
-    buffer = create_string_buffer(256)
-    wdll.odev_ask(b'WAVE?\n', buffer)
-
-    return buffer.value
-
-
-def setwave(wave):
-    """Send a wavelength"""
-    status()
-    wave = float(wave)
-
-    if not 300 <= wave <= 1200:
-        raise ValueError('a must be within 300 - 1200')
-
-    wdll.odev_write(b'GOWAVE %.3f\n' % wave)
-
-    return getwave(getStatus=False)
+        return self.getwave()
