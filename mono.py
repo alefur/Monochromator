@@ -23,7 +23,9 @@ class Monochromator:
             self.init()
 
     def init(self):
+        """set monochromator in handshake mode"""
         self.wdll.odev_write(b'HANDSHAKE 1\n')
+        return self.sendCommand('HANDSHAKE?')
 
     def sendCommand(self, cmdStr, error='20\r\n'):
         """send command to monochromator"""
